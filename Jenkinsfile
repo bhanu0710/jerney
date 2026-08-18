@@ -146,6 +146,14 @@ pipeline {
 
         stage("Quality Gate") {
 
+
+            when {
+                expression {
+                    env.BACKEND_CHANGED == "true" ||
+                    env.FRONTEND_CHANGED == "true"
+                }
+            }
+
             steps {
 
                 timeout(time:5,unit:'MINUTES') {
@@ -316,6 +324,13 @@ pipeline {
 
         stage("Push Images") {
 
+            when {
+                expression {
+                    env.BACKEND_CHANGED == "true" ||
+                    env.FRONTEND_CHANGED == "true"
+                }
+            }
+
             steps {
 
                 script {
@@ -349,6 +364,19 @@ pipeline {
         }
 
         stage("GitOps") {
+
+
+
+            when {
+
+                expression {
+                
+                      env.BACKEND_CHANGED=="true" ||
+                      env.FRONTEND_CHANGED=="true"
+                
+                        }
+                
+                    }
 
             steps {
 
