@@ -27,6 +27,20 @@ pipeline {
             }
         }
 
+
+        stage('Set Image Tag') {
+            steps {
+                script {
+                    env.IMAGE_TAG = sh(
+                        script: "git rev-parse --short HEAD",
+                        returnStdout: true
+                    ).trim()
+        
+                    echo "Image Tag: ${env.IMAGE_TAG}"
+        }
+    }
+}
+
         stage('SonarQube Scan') {
 
              steps {
@@ -141,6 +155,152 @@ pipeline {
 
     }
 
+
+    stage('Build Docker Images') {
+
+        parallel {
+    
+            stage('Backend') {
+                steps {
+                    dir('backend') {
+                        sh """
+                        docker build \
+                        -t bhanu0710/jerney-backend:${IMAGE_TAG} .
+                        """
+                    }
+                }
+            }
+    
+            stage('Frontend') {
+                steps {
+                    dir('frontend') {
+                        sh """
+                        docker build \
+                        -t bhanu0710/jerney-frontend:${IMAGE_TAG} .
+                        """
+                }
+            }
+        }
+
+    }
+
+}
+
+
+
+    stage('Trivy Image Scan') {
+
+        parallel {
+    
+            stage('Backend Image') {
+                steps {
+                    sh """
+                    trivy image \
+                    --severity HIGH,CRITICAL \
+                    bhanu0710/jerney-backend:${IMAGE_TAG}
+                    """
+                }
+            }
+    
+            stage('Frontend Image') {
+                steps {
+                    sh """
+                    trivy image \
+                    --severity HIGH,CRITICAL \
+                    bhanu0710/jerney-frontend:${IMAGE_TAG}
+                    """
+            }
+        }
+
+    }
+
+}
+
+
+
+    stage('Push Images') {
+
+        steps {
+    
+            withCredentials([
+                usernamePassword(
+                    credentialsId: 'docker-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )
+            ]) {
+    
+                sh """
+                echo \$DOCKER_PASS | docker login \
+                    -u \$DOCKER_USER \
+                    --password-stdin
+    
+                docker push bhanu0710/jerney-backend:${IMAGE_TAG}
+                docker push bhanu0710/jerney-frontend:${IMAGE_TAG}
+    
+                docker tag bhanu0710/jerney-backend:${IMAGE_TAG} bhanu0710/jerney-backend:latest
+                docker tag bhanu0710/jerney-frontend:${IMAGE_TAG} bhanu0710/jerney-frontend:latest
+    
+                docker push bhanu0710/jerney-backend:latest
+                docker push bhanu0710/jerney-frontend:latest
+    
+                docker logout
+                """
+        }
+    }
+}
+
+
+
+    stage('Update Kubernetes Manifests') {
+
+        steps {
+    
+            sh """
+            yq -i '
+            .spec.template.spec.containers[0].image =
+            "bhanu0710/jerney-backend:${IMAGE_TAG}"
+            ' k8s/backend/deployment.yaml
+    
+            yq -i '
+            .spec.template.spec.containers[0].image =
+            "bhanu0710/jerney-frontend:${IMAGE_TAG}"
+            ' k8s/frontend/deployment.yaml
+            """
+    }
+
+}
+
+
+
+    stage('Commit GitOps Changes') {
+
+        steps {
+    
+            withCredentials([
+                usernamePassword(
+                    credentialsId: 'github',
+                    usernameVariable: 'GIT_USER',
+                    passwordVariable: 'GIT_TOKEN'
+                )
+            ]) {
+    
+                sh """
+                git config user.name "Jenkins CI"
+                git config user.email "jenkins@local"
+    
+                git add k8s/
+    
+                git commit -m "Update images to ${IMAGE_TAG}" || true
+    
+                git push https://${GIT_USER}:${GIT_TOKEN}@github.com/bhanu0710/Jerney.git HEAD:main
+                """
+        }
+
+    }
+
+}
+
     post {
 
         success {
@@ -152,6 +312,10 @@ pipeline {
         }
 
         always {
+
+            sh """
+               docker system prune -af
+               """
             cleanWs()
         }
     }
