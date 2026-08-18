@@ -424,6 +424,13 @@ pipeline {
 
         always {
 
+            archiveArtifacts(
+            artifacts: 'reports/*.txt',
+            fingerprint: true,
+            allowEmptyArchive: true
+            )
+
+
             sh 'docker system prune -af || true'
 
             cleanWs()
