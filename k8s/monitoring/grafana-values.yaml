@@ -3,3 +3,8 @@ grafana:
     server:
       root_url: "%(protocol)s://%(domain)s/grafana/"
       serve_from_sub_path: true
+
+prometheus:
+  prometheusSpec:
+    externalUrl: "http://34.193.113.223:31424/prometheus"
+    routePrefix: /prometheus
