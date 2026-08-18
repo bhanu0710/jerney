@@ -28,21 +28,32 @@ pipeline {
 
                 script {
 
-                    backend = load 'jenkins/backend.groovy'
-
-                    frontend = load 'jenkins/frontend.groovy'
-
-                    docker = load 'jenkins/docker.groovy'
-
-                    security = load 'jenkins/security.groovy'
-
-                    gitops = load 'jenkins/gitops.groovy'
-
-                    utils = load 'jenkins/utils.groovy'
-
-                    env.IMAGE_TAG = utils.gitSha()
-
-                    echo "Tag : ${IMAGE_TAG}"
+                        backend = load 'jenkins/backend.groovy'
+                    
+                        frontend = load 'jenkins/frontend.groovy'
+                    
+                        docker = load 'jenkins/docker.groovy'
+                    
+                        security = load 'jenkins/security.groovy'
+                    
+                        gitops = load 'jenkins/gitops.groovy'
+                    
+                        utils = load 'jenkins/utils.groovy'
+                    
+                        env.IMAGE_TAG = utils.gitSha()
+                    
+                        def files = utils.changedFiles()
+                    
+                        env.BACKEND_CHANGED = utils.backendChanged(files).toString()
+                    
+                        env.FRONTEND_CHANGED = utils.frontendChanged(files).toString()
+                    
+                        env.MANIFEST_CHANGED = utils.manifestsChanged(files).toString()
+                    
+                        echo "Image Tag        : ${env.IMAGE_TAG}"
+                        echo "Backend Changed  : ${env.BACKEND_CHANGED}"
+                        echo "Frontend Changed : ${env.FRONTEND_CHANGED}"
+                        echo "Manifest Changed : ${env.MANIFEST_CHANGED}"
 
                 }
 
@@ -55,6 +66,12 @@ pipeline {
             parallel {
 
                 stage("Backend") {
+
+                    when {
+                       expression {
+                         env.BACKEND_CHANGED == "true"
+                        }
+                     }
 
                     steps {
 
@@ -73,6 +90,12 @@ pipeline {
                 }
 
                 stage("Frontend") {
+
+                    when {
+                        expression {
+                           env.FRONTEND_CHANGED == "true"
+                         }
+                      }
 
                     steps {
 
@@ -170,6 +193,12 @@ pipeline {
 
                 stage("Backend Image") {
 
+                    when {
+                        expression {
+                            env.BACKEND_CHANGED == "true"
+                          }
+                       }
+
                     steps {
 
                         script {
@@ -186,6 +215,13 @@ pipeline {
                 }
 
                 stage("Frontend Image") {
+
+
+                    when {
+                         expression {
+                              env.FRONTEND_CHANGED == "true"
+                           }
+                        }
 
                     steps {
 
@@ -278,13 +314,21 @@ pipeline {
 
                 script {
 
-                    gitops.updateBackend(
-                            "${BACKEND_IMAGE}:${IMAGE_TAG}"
-                    )
+                    if (env.BACKEND_CHANGED == "true") {
 
-                    gitops.updateFrontend(
+                        gitops.updateBackend(
+                            "${BACKEND_IMAGE}:${IMAGE_TAG}"
+                        )
+                    
+                    }
+                    
+                    if (env.FRONTEND_CHANGED == "true") {
+                    
+                        gitops.updateFrontend(
                             "${FRONTEND_IMAGE}:${IMAGE_TAG}"
-                    )
+                        )
+                    
+                    }
 
                     gitops.push()
 
