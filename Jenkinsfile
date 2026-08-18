@@ -35,8 +35,8 @@ pipeline {
 
                      sh """
                      ${SCANNER_HOME}/bin/sonar-scanner \
-                     -Dsonar.projectKey=jerney \
-                     -Dsonar.projectName=Jerney
+                     -Dsonar.projectKey=frontend \
+                     -Dsonar.projectName=frontend
                       """
 
         }
