@@ -21,7 +21,7 @@ spec:
       containers:
       - name: backend
 
-        image: bhanu0710/jerney-backend:v1
+        image: bhanu0710/jerney-backend:v2
 
         imagePullPolicy: Always
 
