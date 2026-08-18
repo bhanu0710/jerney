@@ -6,6 +6,12 @@ pipeline {
         nodejs 'nodejs'
     }
 
+    environment {
+
+    SCANNER_HOME = tool 'sonarqube'
+
+}
+
     stages {
 
         stage('Clean Workspace') {
@@ -20,6 +26,78 @@ pipeline {
                 checkout scm
             }
         }
+
+        stage('SonarQube Scan') {
+
+             steps {
+
+                 withSonarQubeEnv('sonar-server') {
+
+                     sh """
+                     ${SCANNER_HOME}/bin/sonar-scanner \
+                     -Dsonar.projectKey=jerney \
+                     -Dsonar.projectName=Jerney
+                      """
+
+        }
+
+    }
+
+}
+
+
+
+        stage('Quality Check') {
+            steps {
+                script {
+                    waitForQualityGate abortPipeline: true, credentialsId: 'sonar-token' 
+                }
+            }
+        }
+
+
+        stage('Filesystem Scan') {
+    
+          parallel {
+            stage('Trivy Backend FS') {
+    
+                  steps {
+    
+                      dir('backend') {
+    
+                         sh '''
+                         trivy fs \
+                         --severity HIGH,CRITICAL \
+                         .
+                         '''
+    
+            }
+    
+        }
+    
+    }
+    
+    
+            stage('Trivy Frontend FS') {
+    
+                steps {
+            
+                    dir('frontend') {
+            
+                        sh '''
+                        trivy fs \
+                        --severity HIGH,CRITICAL \
+                        .
+                        '''
+                    }
+                }
+            }
+    
+        }
+    
+    }
+
+          
 
         stage('Backend Install') {
             steps {
