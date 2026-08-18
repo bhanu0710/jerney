@@ -8,316 +8,316 @@ pipeline {
 
     environment {
 
-    SCANNER_HOME = tool 'sonarqube'
+        SCANNER_HOME = tool 'sonarqube'
 
-}
+        BACKEND_IMAGE = "bhanu0710/jerney-backend"
+
+        FRONTEND_IMAGE = "bhanu0710/jerney-frontend"
+
+    }
 
     stages {
 
-        stage('Clean Workspace') {
+        stage("Initialize") {
+
             steps {
+
                 cleanWs()
-                sh 'echo "hii" '
-            }
-        }
 
-        stage('Checkout') {
-            steps {
                 checkout scm
-            }
-        }
 
-
-        stage('Set Image Tag') {
-            steps {
                 script {
-                    env.IMAGE_TAG = sh(
-                        script: "git rev-parse --short HEAD",
-                        returnStdout: true
-                    ).trim()
-        
-                    echo "Image Tag: ${env.IMAGE_TAG}"
-        }
-    }
-}
 
-                stage('SonarQube Scan') {
-        
-                     steps {
-        
-                         withSonarQubeEnv('sonar-server') {
-        
-                             sh """
-                             ${SCANNER_HOME}/bin/sonar-scanner \
-                             -Dsonar.projectKey=jerney \
-                             -Dsonar.projectName=jerney
-                              """
+                    backend = load 'jenkins/backend.groovy'
 
-        }
+                    frontend = load 'jenkins/frontend.groovy'
 
-    }
+                    docker = load 'jenkins/docker.groovy'
 
-}
+                    security = load 'jenkins/security.groovy'
 
+                    gitops = load 'jenkins/gitops.groovy'
 
+                    utils = load 'jenkins/utils.groovy'
 
-            stage('Quality Check') {
-                steps {
-                    script {
-                        waitForQualityGate abortPipeline: true, credentialsId: 'sonar-token' 
+                    env.IMAGE_TAG = utils.gitSha()
+
+                    echo "Tag : ${IMAGE_TAG}"
+
                 }
+
             }
+
         }
 
+        stage("Application CI") {
 
-            stage('Filesystem Scan') {
-        
-              parallel {
-                stage('Trivy Backend FS') {
-        
-                      steps {
-        
-                          dir('backend') {
-        
-                             sh '''
-                             trivy fs \
-                             --severity HIGH,CRITICAL \
-                             .
-                             '''
-    
-            }
-    
-        }
-    
-    }
-    
-    
-                stage('Trivy Frontend FS') {
-        
+            parallel {
+
+                stage("Backend") {
+
                     steps {
-                
-                        dir('frontend') {
-                
-                            sh '''
-                            trivy fs \
-                            --severity HIGH,CRITICAL \
-                            .
-                            '''
+
+                        script {
+
+                            backend.install()
+
+                            backend.lint()
+
+                            backend.test()
+
+                        }
+
                     }
+
                 }
-            }
-    
-        }
-    
-    }
 
-          
+                stage("Frontend") {
 
-            stage('Backend Install') {
-                steps {
-                    dir('backend') {
-                        sh 'npm ci'
-                }
-            }
-        }
-
-            stage('Backend Lint') {
-                steps {
-                    dir('backend') {
-                        sh 'npm run lint'
-                }
-            }
-        }
-
-            stage('Frontend Install') {
-                steps {
-                    dir('frontend') {
-                        sh 'npm ci'
-                }
-            }
-        }
-
-            stage('Frontend Build') {
-                steps {
-                    dir('frontend') {
-                        sh 'npm run build'
-                }
-            }
-        }
-
-            stage('Frontend Lint') {
-                steps {
-                    dir('frontend') {
-                        sh 'npm run lint'
-                }
-            }
-        }
-
-    }
-
-
-            stage('Build Docker Images') {
-        
-                parallel {
-            
-                    stage('Backend') {
-                        steps {
-                            dir('backend') {
-                                sh """
-                                docker build \
-                                -t bhanu0710/jerney-backend:${IMAGE_TAG} .
-                                """
-                    }
-                }
-            }
-    
-                        stage('Frontend') {
-                            steps {
-                                dir('frontend') {
-                                    sh """
-                                    docker build \
-                                    -t bhanu0710/jerney-frontend:${IMAGE_TAG} .
-                                    """
-                }
-            }
-        }
-
-    }
-
-}
-
-
-
-            stage('Trivy Image Scan') {
-        
-                parallel {
-            
-                    stage('Backend Image') {
-                        steps {
-                            sh """
-                            trivy image \
-                            --severity HIGH,CRITICAL \
-                            bhanu0710/jerney-backend:${IMAGE_TAG}
-                            """
-                }
-            }
-    
-                    stage('Frontend Image') {
-                        steps {
-                            sh """
-                            trivy image \
-                            --severity HIGH,CRITICAL \
-                            bhanu0710/jerney-frontend:${IMAGE_TAG}
-                            """
-            }
-        }
-
-    }
-
-}
-
-
-
-            stage('Push Images') {
-        
-                steps {
-            
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: 'docker-creds',
-                            usernameVariable: 'DOCKER_USER',
-                            passwordVariable: 'DOCKER_PASS'
-                        )
-                    ]) {
-            
-                        sh """
-                        echo \$DOCKER_PASS | docker login \
-                            -u \$DOCKER_USER \
-                            --password-stdin
-            
-                        docker push bhanu0710/jerney-backend:${IMAGE_TAG}
-                        docker push bhanu0710/jerney-frontend:${IMAGE_TAG}
-            
-                        docker tag bhanu0710/jerney-backend:${IMAGE_TAG} bhanu0710/jerney-backend:latest
-                        docker tag bhanu0710/jerney-frontend:${IMAGE_TAG} bhanu0710/jerney-frontend:latest
-            
-                        docker push bhanu0710/jerney-backend:latest
-                        docker push bhanu0710/jerney-frontend:latest
-            
-                        docker logout
-                        """
-        }
-    }
-}
-
-
-
-                stage('Update Kubernetes Manifests') {
-            
                     steps {
-                
-                        sh """
-                        yq -i '
-                        .spec.template.spec.containers[0].image =
-                        "bhanu0710/jerney-backend:${IMAGE_TAG}"
-                        ' k8s/backend/deployment.yaml
-                
-                        yq -i '
-                        .spec.template.spec.containers[0].image =
-                        "bhanu0710/jerney-frontend:${IMAGE_TAG}"
-                        ' k8s/frontend/deployment.yaml
-                        """
-    }
 
-}
+                        script {
 
+                            frontend.install()
 
+                            frontend.build()
 
-            stage('Commit GitOps Changes') {
-        
-                steps {
-            
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: 'github',
-                            usernameVariable: 'GIT_USER',
-                            passwordVariable: 'GIT_TOKEN'
-                        )
-                    ]) {
-            
-                        sh """
-                        git config user.name "Jenkins CI"
-                        git config user.email "jenkins@local"
-            
-                        git add k8s/
-            
-                        git commit -m "Update images to ${IMAGE_TAG}" || true
-            
-                        git push https://${GIT_USER}:${GIT_TOKEN}@github.com/bhanu0710/Jerney.git HEAD:main
-                        """
+                            frontend.lint()
+
+                            frontend.test()
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        stage("SonarQube") {
+
+            steps {
+
+                withSonarQubeEnv("sonar-server") {
+
+                    sh """
+                    ${SCANNER_HOME}/bin/sonar-scanner \
+                    -Dsonar.projectKey=jerney \
+                    -Dsonar.projectName=jerney
+                    """
+
+                }
+
+            }
+
+        }
+
+        stage("Quality Gate") {
+
+            steps {
+
+                timeout(time:5,unit:'MINUTES') {
+
+                    waitForQualityGate abortPipeline:true
+
+                }
+
+            }
+
+        }
+
+        stage("Filesystem Scan") {
+
+            parallel {
+
+                stage("Backend Scan") {
+
+                    steps {
+
+                        script {
+
+                            security.filesystemScan("backend")
+
+                        }
+
+                    }
+
+                }
+
+                stage("Frontend Scan") {
+
+                    steps {
+
+                        script {
+
+                            security.filesystemScan("frontend")
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        stage("Docker Build") {
+
+            parallel {
+
+                stage("Backend Image") {
+
+                    steps {
+
+                        script {
+
+                            backend.buildImage(
+                                    BACKEND_IMAGE,
+                                    IMAGE_TAG
+                            )
+
+                        }
+
+                    }
+
+                }
+
+                stage("Frontend Image") {
+
+                    steps {
+
+                        script {
+
+                            frontend.buildImage(
+                                    FRONTEND_IMAGE,
+                                    IMAGE_TAG
+                            )
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        stage("Image Scan") {
+
+            parallel {
+
+                stage("Backend") {
+
+                    steps {
+
+                        script {
+
+                            security.imageScan(
+                                    "${BACKEND_IMAGE}:${IMAGE_TAG}"
+                            )
+
+                        }
+
+                    }
+
+                }
+
+                stage("Frontend") {
+
+                    steps {
+
+                        script {
+
+                            security.imageScan(
+                                    "${FRONTEND_IMAGE}:${IMAGE_TAG}"
+                            )
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        stage("Push Images") {
+
+            steps {
+
+                script {
+
+                    docker.login()
+
+                    docker.push(
+                            BACKEND_IMAGE,
+                            IMAGE_TAG
+                    )
+
+                    docker.push(
+                            FRONTEND_IMAGE,
+                            IMAGE_TAG
+                    )
+
+                    docker.logout()
+
+                }
+
+            }
+
+        }
+
+        stage("GitOps") {
+
+            steps {
+
+                script {
+
+                    gitops.updateBackend(
+                            "${BACKEND_IMAGE}:${IMAGE_TAG}"
+                    )
+
+                    gitops.updateFrontend(
+                            "${FRONTEND_IMAGE}:${IMAGE_TAG}"
+                    )
+
+                    gitops.push()
+
+                }
+
+            }
+
         }
 
     }
-
-}
 
     post {
 
         success {
-            echo "CI completed successfully."
+
+            echo "Pipeline Successful"
+
         }
 
         failure {
-            echo "CI failed."
+
+            echo "Pipeline Failed"
+
         }
 
         always {
 
-            sh """
-               docker system prune -af
-               """
+            sh 'docker system prune -af || true'
+
             cleanWs()
+
         }
+
     }
 
 }
