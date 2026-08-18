@@ -121,6 +121,13 @@ pipeline {
 
         stage("SonarQube") {
 
+            when {
+                expression {
+                   env.BACKEND_CHANGED == "true" ||
+                   env.FRONTEND_CHANGED == "true"
+                 }
+               }
+
             steps {
 
                 withSonarQubeEnv("sonar-server") {
@@ -157,6 +164,12 @@ pipeline {
 
                 stage("Backend Scan") {
 
+                    when {
+                        expression {
+                            env.BACKEND_CHANGED == "true"
+                        }
+                    }
+
                     steps {
 
                         script {
@@ -170,6 +183,12 @@ pipeline {
                 }
 
                 stage("Frontend Scan") {
+
+                    when {
+                        expression {
+                            env.FRONTEND_CHANGED == "true"
+                        }
+                    }
 
                     steps {
 
@@ -248,6 +267,12 @@ pipeline {
 
                 stage("Backend") {
 
+                    when {
+                        expression {
+                            env.BACKEND_CHANGED == "true"
+                        }
+                    }
+
                     steps {
 
                         script {
@@ -263,6 +288,13 @@ pipeline {
                 }
 
                 stage("Frontend") {
+
+
+                    when {
+                        expression {
+                            env.FRONTEND_CHANGED == "true"
+                        }
+                    }
 
                     steps {
 
@@ -290,15 +322,23 @@ pipeline {
 
                     docker.login()
 
-                    docker.push(
+                    if(env.BACKEND_CHANGED=="true"){
+
+                        docker.push(
                             BACKEND_IMAGE,
                             IMAGE_TAG
-                    )
-
-                    docker.push(
+                        )
+                    
+                    }
+                
+                    if(env.FRONTEND_CHANGED=="true"){
+                    
+                        docker.push(
                             FRONTEND_IMAGE,
                             IMAGE_TAG
-                    )
+                        )
+                    
+                    }
 
                     docker.logout()
 
