@@ -1,97 +1,80 @@
 pipeline {
-    agent any 
+
+    agent any
+
     tools {
-        
-        nodejs 'nodejs'
+        nodejs 'NodeJS-20'
     }
-    environment  {
-        SCANNER_HOME=tool 'sonarqube'
-        IMAGE_NAME = "bhanu/myapp"
-        
-    }
+
     stages {
-        stage('Cleaning Workspace') {
+
+        stage('Clean Workspace') {
             steps {
                 cleanWs()
             }
         }
-        stage('Checkout from Git') {
+
+        stage('Checkout') {
             steps {
-                git credentialsId: 'github', url: 'https://github.com/AmanPathak-DevOps/End-to-End-Kubernetes-Three-Tier-DevSecOps-Project.git'
+                checkout scm
             }
         }
-        stage('Sonarqube Analysis') {
+
+        stage('Backend Install') {
             steps {
-                dir('Application-Code/frontend') {
-                    withSonarQubeEnv('sonar-server') {
-                        sh ''' $SCANNER_HOME/bin/sonar-scanner \
-                        -Dsonar.projectName=frontend \
-                        -Dsonar.projectKey=frontend '''
-                    }
+                dir('backend') {
+                    sh 'npm ci'
                 }
             }
         }
-        stage('Quality Check') {
+
+        stage('Backend Lint') {
             steps {
-                script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token' 
+                dir('backend') {
+                    sh 'npm run lint'
                 }
             }
         }
-        
-        stage('Trivy File Scan') {
+
+        stage('Frontend Install') {
             steps {
-                dir('Application-Code/frontend') {
-                    sh 'trivy fs . > trivyfs.txt'
+                dir('frontend') {
+                    sh 'npm ci'
                 }
             }
         }
-        stage("Docker Image Build") {
+
+        stage('Frontend Build') {
             steps {
-                script {
-                    dir('Application-Code/frontend') {
-                            
-                            sh ' docker build -t firstbuild .'
-                    }
+                dir('frontend') {
+                    sh 'npm run build'
                 }
             }
         }
-        stage("Push Docker Image") {
 
-    steps {
-
-        withCredentials([usernamePassword(
-            credentialsId: 'docker-creds',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'DOCKER_PASS'
-        )]) {
-
-            sh '''
-            docker tag firstbuild:latest $DOCKER_USER/myapp:${BUILD_NUMBER}
-
-            docker tag firstbuild:latest $DOCKER_USER/myapp:latest
-
-            echo "$DOCKER_PASS" | docker login \
-                -u "$DOCKER_USER" \
-                --password-stdin
-
-            docker push $DOCKER_USER/myapp:${BUILD_NUMBER}
-
-            docker push $DOCKER_USER/myapp:latest
-
-            docker logout
-            '''
+        stage('Frontend Lint') {
+            steps {
+                dir('frontend') {
+                    sh 'npm run lint'
+                }
+            }
         }
 
     }
 
-}
-        
-        
-            
-                            
-                
-            
-        
+    post {
+
+        success {
+            echo "CI completed successfully."
+        }
+
+        failure {
+            echo "CI failed."
+        }
+
+        always {
+            cleanWs()
+        }
     }
+
 }
