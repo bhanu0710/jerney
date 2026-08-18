@@ -4,6 +4,8 @@ kind: ServiceMonitor
 metadata:
   name: backend
   namespace: monitoring
+  labels:
+    release: monitoring
 
 spec:
   selector:
