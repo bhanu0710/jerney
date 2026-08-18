@@ -1,8 +1,15 @@
 grafana:
   grafana.ini:
     server:
-      root_url: "%(protocol)s://%(domain)s/grafana/"
+      root_url: "http://34.193.113.223:31424/grafana"
       serve_from_sub_path: true
+
+  additionalDataSources:
+    - name: Prometheus-Internal
+      type: prometheus
+      access: proxy
+      url: http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
+      isDefault: true
 
 prometheus:
   prometheusSpec:
