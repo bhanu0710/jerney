@@ -10,7 +10,8 @@ spec:
     app: backend
 
   ports:
-  - port: 5000
+  - name: http
+    port: 5000
     targetPort: 5000
 
   type: ClusterIP
